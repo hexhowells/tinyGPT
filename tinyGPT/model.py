@@ -5,6 +5,11 @@ from torch.nn import functional as F
 from transformers.models.gpt2 import GPT2LMHeadModel
 
 import math
+"""
+
+q = 32, 128, 512
+32, 128, 
+"""
 
 
 class CausalSelfAttention(nn.Module):
@@ -28,22 +33,25 @@ class CausalSelfAttention(nn.Module):
     def forward(self, x):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
 
-        # calculate query, key, values for all heads in batch and move head forward to be the batch dim
-        q, k ,v  = self.c_attn(x).split(self.n_embd, dim=2)
-        k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        # multiply raw x (shape C) by a linear layer to get Q, K, V (shape C each)
+        q, k, v = self.c_attn(x).split(self.n_embd, dim=2)  # split on the embedding dim (B, T, n_embd)
 
-        # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
-        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-        att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
+        # split output embedding layer C into multiple heads
+        k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, n_head, T, head_dim)
+        q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, n_head, T, head_dim)
+        v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, n_head, T, head_dim)
+
+        # causal self-attention; Self-attend: (B, n_head, T, head_dim) x (B, n_head, head_dim, T) -> (B, n_head, T, T)
+        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))  # matmul and scale
+        att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))  # mask
         att = F.softmax(att, dim=-1)
         att = self.attn_dropout(att)
-        y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+        y = att @ v # (B, n_head, T, T) x (B, n_head, T, head_dim) -> (B, n_head, T, head_dim)
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
 
         # output projection
         y = self.resid_dropout(self.c_proj(y))
+        
         return y
 
 
