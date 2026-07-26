@@ -109,6 +109,7 @@ class GPT(nn.Module):
 
 
     def _init_weights(self, module):
+        """initialise the GPT model weights"""
         if isinstance(module, nn.Linear):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
             if module.bias is not None:
@@ -121,7 +122,7 @@ class GPT(nn.Module):
 
 
     @classmethod
-    def from_pretrained(cls, model_type):
+    def from_pretrained(cls, model_type: str):
         """
         Initialize a pretrained GPT model by copying over the weights
         from a huggingface/transformers checkpoint.
@@ -161,34 +162,31 @@ class GPT(nn.Module):
         return model
 
 
-    def configure_optimizers(self, train_config):
+    def configure_optimizers(self, train_config: dict) -> torch.optim.Optimizer:
         """
         This long function is unfortunately doing something very simple and is being very defensive:
         We are separating out all parameters of the model into two buckets: those that will experience
         weight decay for regularization and those that won't (biases, and layernorm/embedding weights).
         We are then returning the PyTorch optimizer object.
         """
-
         # separate out all parameters to those that will and won't experience regularizing weight decay
         decay = set()
         no_decay = set()
         whitelist_weight_modules = (torch.nn.Linear, )
         blacklist_weight_modules = (torch.nn.LayerNorm, torch.nn.Embedding)
-        for mn, m in self.named_modules():
-            for pn, p in m.named_parameters():
-                fpn = '%s.%s' % (mn, pn) if mn else pn # full param name
+        
+        for module_name, m in self.named_modules():
+            for param_name, _ in m.named_parameters():
+                full_param_name = '%s.%s' % (module_name, param_name) if module_name else param_name # full param name
                 # random note: because named_modules and named_parameters are recursive
                 # we will see the same tensors p many many times. but doing it this way
                 # allows us to know which parent module any tensor p belongs to...
-                if pn.endswith('bias'):
-                    # all biases will not be decayed
-                    no_decay.add(fpn)
-                elif pn.endswith('weight') and isinstance(m, whitelist_weight_modules):
-                    # weights of whitelist modules will be weight decayed
-                    decay.add(fpn)
-                elif pn.endswith('weight') and isinstance(m, blacklist_weight_modules):
-                    # weights of blacklist modules will NOT be weight decayed
-                    no_decay.add(fpn)
+                if param_name.endswith('bias'):
+                    no_decay.add(full_param_name)
+                elif param_name.endswith('weight') and isinstance(m, whitelist_weight_modules):
+                    decay.add(full_param_name)
+                elif param_name.endswith('weight') and isinstance(m, blacklist_weight_modules):
+                    no_decay.add(full_param_name)
 
         # validate that we considered every parameter
         param_dict = {pn: p for pn, p in self.named_parameters()}
@@ -204,10 +202,11 @@ class GPT(nn.Module):
             {"params": [param_dict[pn] for pn in sorted(list(no_decay))], "weight_decay": 0.0},
         ]
         optimizer = torch.optim.AdamW(optim_groups, lr=train_config['learning_rate'], betas=train_config['betas'])
+        
         return optimizer
 
 
-    def forward(self, idx, targets=None):
+    def forward(self, idx, targets=None) -> tuple[torch.Tensor, torch.Tensor|None]:
         device = idx.device
         b, t = idx.size()
         assert t <= self.block_size, f"Cannot forward sequence of length {t}, block size is only {self.block_size}"
@@ -231,7 +230,14 @@ class GPT(nn.Module):
 
 
     @torch.no_grad()
-    def generate(self, idx, max_new_tokens, temperature=1.0, do_sample=False, top_k=None):
+    def generate(
+        self, 
+        idx: torch.Tensor, 
+        max_new_tokens: int, 
+        temperature: float = 1.0, 
+        do_sample: bool = False, 
+        top_k: int|None = None
+    ) -> torch.Tensor:
         """
         Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
         the sequence max_new_tokens times, feeding the predictions back into the model each time.
