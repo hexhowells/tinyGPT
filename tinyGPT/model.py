@@ -5,6 +5,7 @@ from torch.nn import functional as F
 from transformers.models.gpt2 import GPT2LMHeadModel
 
 import math
+from typing import Callable
 
 from utils import load_config
 
@@ -21,8 +22,13 @@ class CausalSelfAttention(nn.Module):
         self.attn_dropout = nn.Dropout(config['attn_pdrop'])
         self.resid_dropout = nn.Dropout(config['resid_pdrop'])
         # causal mask to ensure that attention is only applied to the left in the input sequence
-        self.register_buffer("bias", torch.tril(torch.ones(config['context_size'], config['context_size']))
-                                     .view(1, 1, config['context_size'], config['context_size']))
+        # persistent=False prevents saving the non-trainable mask tensor to state_dict
+        self.register_buffer(
+            "bias",
+            torch.tril(torch.ones(config['context_size'], config['context_size']))
+                 .view(1, 1, config['context_size'], config['context_size']),
+            persistent=False
+        )
         self.n_head = config['n_head']
         self.n_embd = config['n_embd']
 
@@ -52,6 +58,22 @@ class CausalSelfAttention(nn.Module):
         return y
 
 
+class MLP(nn.Module):
+    def __init__(self, config: dict):
+        super().__init__()
+        self.c_fc = nn.Linear(config['n_embd'], 4 * config['n_embd'])
+        self.gelu = nn.GELU()
+        self.c_proj = nn.Linear(4 * config['n_embd'], config['n_embd'])
+        self.dropout = nn.Dropout(config['resid_pdrop'])
+
+    def forward(self, x):
+        x = self.c_fc(x)
+        x = self.gelu(x)
+        x = self.c_proj(x)
+        x = self.dropout(x)
+        return x
+
+
 class Block(nn.Module):
     """single transformer block"""
     def __init__(self, config: dict):
@@ -59,12 +81,7 @@ class Block(nn.Module):
         self.ln_1 = nn.LayerNorm(config['n_embd'])
         self.attn = CausalSelfAttention(config)
         self.ln_2 = nn.LayerNorm(config['n_embd'])
-        self.mlp = nn.Sequential(
-            nn.Linear(config['n_embd'], 4 * config['n_embd']),
-            nn.GELU(),
-            nn.Linear(4 * config['n_embd'], config['n_embd']),
-            nn.Dropout(config['resid_pdrop']),
-        )
+        self.mlp = MLP(config)
 
 
     def forward(self, x):
@@ -89,12 +106,13 @@ class GPT(nn.Module):
             config['n_head'] = config['models'][model_type]['n_head']
             config['n_embd'] = config['models'][model_type]['n_embd']
 
-        self.word_token_emb = nn.Embedding(config['vocab_size'], config['n_embd'])
-        self.word_pos_emb = nn.Embedding(config['context_size'], config['n_embd'])
-        self.drop = nn.Dropout(config['embd_pdrop'])
-        self.h = nn.ModuleList([Block(config) for _ in range(config['n_layer'])])
-        self.ln_f = nn.LayerNorm(config['n_embd'])
-
+        self.transformer: nn.ModuleDict = nn.ModuleDict(dict(
+            wte = nn.Embedding(config['vocab_size'], config['n_embd']),
+            wpe = nn.Embedding(config['context_size'], config['n_embd']),
+            drop = nn.Dropout(config['embd_pdrop']),
+            h = nn.ModuleList([Block(config) for _ in range(config['n_layer'])]),
+            ln_f = nn.LayerNorm(config['n_embd']),
+        ))
         self.lm_head = nn.Linear(config['n_embd'], config['vocab_size'], bias=False)
 
         # init all weights, and apply a special scaled init to the residual projections, per GPT-2 paper
@@ -104,7 +122,7 @@ class GPT(nn.Module):
                 torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config['n_layer']))
 
         # report number of parameters (note we don't count the decoder parameters in lm_head)
-        n_params = sum(p.numel() for pn, p in self.named_parameters() if 'lm_head' not in pn)
+        n_params = sum(p.numel() for p in self.transformer.parameters())
         print("number of parameters: %.2fM" % (n_params/1e6,))
 
 
@@ -146,6 +164,7 @@ class GPT(nn.Module):
         transposed = ['attn.c_attn.weight', 'attn.c_proj.weight', 'mlp.c_fc.weight', 'mlp.c_proj.weight']
         # basically the openai checkpoints use a "Conv1D" module, but we only want to use a vanilla nn.Linear.
         # this means that we have to transpose these weights when we import them
+        print(len(keys), len(sd))
         assert len(keys) == len(sd)
         for k in keys:
             if any(k.endswith(w) for w in transposed):
@@ -210,18 +229,18 @@ class GPT(nn.Module):
         device = idx.device
         b, t = idx.size()
         assert t <= self.context_size, f"Cannot forward sequence of length {t}, block size is only {self.context_size}"
-        pos = torch.arange(0, t, dtype=torch.long, device=device).unsqueeze(0) # shape (1, t)
+        pos = torch.arange(0, t, dtype=torch.long, device=device).unsqueeze(0)
 
-        # forward the GPT model itself
-        tok_emb = self.word_token_emb(idx) # token embeddings of shape (b, t, n_embd)
-        pos_emb = self.word_pos_emb(pos) # position embeddings of shape (1, t, n_embd)
-        x = self.drop(tok_emb + pos_emb)
-        for block in self.h:
+        tok_emb = self.transformer.wte(idx)
+        pos_emb = self.transformer.wpe(pos)
+        x = self.transformer.drop(tok_emb + pos_emb)
+        
+        for block in self.transformer.h:
             x = block(x)
-        x = self.ln_f(x)
+        
+        x = self.transformer.ln_f(x)
         logits = self.lm_head(x)
 
-        # if we are given some desired targets also calculate the loss
         loss = None
         if targets is not None:
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
