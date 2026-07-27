@@ -21,8 +21,8 @@ class CausalSelfAttention(nn.Module):
         self.attn_dropout = nn.Dropout(config['attn_pdrop'])
         self.resid_dropout = nn.Dropout(config['resid_pdrop'])
         # causal mask to ensure that attention is only applied to the left in the input sequence
-        self.register_buffer("bias", torch.tril(torch.ones(config['block_size'], config['block_size']))
-                                     .view(1, 1, config['block_size'], config['block_size']))
+        self.register_buffer("bias", torch.tril(torch.ones(config['context_size'], config['context_size']))
+                                     .view(1, 1, config['context_size'], config['context_size']))
         self.n_head = config['n_head']
         self.n_embd = config['n_embd']
 
@@ -78,8 +78,8 @@ class GPT(nn.Module):
     def __init__(self, config: dict):
         super().__init__()
         assert config['vocab_size'] is not None
-        assert config['block_size'] is not None
-        self.block_size = config['block_size']
+        assert config['context_size'] is not None
+        self.context_size = config['context_size']
 
         model_type = config['model_type']
         
@@ -89,8 +89,8 @@ class GPT(nn.Module):
             config['n_head'] = config['models'][model_type]['n_head']
             config['n_embd'] = config['models'][model_type]['n_embd']
 
-        self.wte = nn.Embedding(config['vocab_size'], config['n_embd'])
-        self.wpe = nn.Embedding(config['block_size'], config['n_embd'])
+        self.word_token_emb = nn.Embedding(config['vocab_size'], config['n_embd'])
+        self.word_pos_emb = nn.Embedding(config['context_size'], config['n_embd'])
         self.drop = nn.Dropout(config['embd_pdrop'])
         self.h = nn.ModuleList([Block(config) for _ in range(config['n_layer'])])
         self.ln_f = nn.LayerNorm(config['n_embd'])
@@ -104,7 +104,7 @@ class GPT(nn.Module):
                 torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config['n_layer']))
 
         # report number of parameters (note we don't count the decoder parameters in lm_head)
-        n_params = sum(p.numel() for p in self.transformer.parameters())
+        n_params = sum(p.numel() for pn, p in self.named_parameters() if 'lm_head' not in pn)
         print("number of parameters: %.2fM" % (n_params/1e6,))
 
 
@@ -133,7 +133,7 @@ class GPT(nn.Module):
         config = load_config()
         config['model_type'] = model_type
         config['vocab_size'] = 50257 # openai's model vocabulary
-        config['block_size'] = 1024  # openai's model block_size
+        config['context_size'] = 1024  # openai's model context_size
         model = GPT(config)
         sd = model.state_dict()
 
@@ -209,12 +209,12 @@ class GPT(nn.Module):
     def forward(self, idx, targets=None) -> tuple[torch.Tensor, torch.Tensor|None]:
         device = idx.device
         b, t = idx.size()
-        assert t <= self.block_size, f"Cannot forward sequence of length {t}, block size is only {self.block_size}"
+        assert t <= self.context_size, f"Cannot forward sequence of length {t}, block size is only {self.context_size}"
         pos = torch.arange(0, t, dtype=torch.long, device=device).unsqueeze(0) # shape (1, t)
 
         # forward the GPT model itself
-        tok_emb = self.wte(idx) # token embeddings of shape (b, t, n_embd)
-        pos_emb = self.wpe(pos) # position embeddings of shape (1, t, n_embd)
+        tok_emb = self.word_token_emb(idx) # token embeddings of shape (b, t, n_embd)
+        pos_emb = self.word_pos_emb(pos) # position embeddings of shape (1, t, n_embd)
         x = self.drop(tok_emb + pos_emb)
         for block in self.h:
             x = block(x)
@@ -244,8 +244,8 @@ class GPT(nn.Module):
         Most likely you'll want to make sure to be in model.eval() mode of operation for this.
         """
         for _ in range(max_new_tokens):
-            # if the sequence context is growing too long we must crop it at block_size
-            idx_cond = idx if idx.size(1) <= self.block_size else idx[:, -self.block_size:]
+            # if the sequence context is growing too long we must crop it at context_size
+            idx_cond = idx if idx.size(1) <= self.context_size else idx[:, -self.context_size:]
             # forward the model to get the logits for the index in the sequence
             logits, _ = self(idx_cond)
             # pluck the logits at the final step and scale by desired temperature
