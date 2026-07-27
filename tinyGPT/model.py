@@ -231,14 +231,14 @@ class GPT(nn.Module):
         assert t <= self.context_size, f"Cannot forward sequence of length {t}, block size is only {self.context_size}"
         pos = torch.arange(0, t, dtype=torch.long, device=device).unsqueeze(0)
 
-        tok_emb = self.transformer.wte(idx)
-        pos_emb = self.transformer.wpe(pos)
-        x = self.transformer.drop(tok_emb + pos_emb)
+        tok_emb = self.transformer.wte(idx)  # type: ignore
+        pos_emb = self.transformer.wpe(pos)  # type: ignore
+        x = self.transformer.drop(tok_emb + pos_emb)  # type: ignore
         
-        for block in self.transformer.h:
+        for block in self.transformer.h:  # type: ignore
             x = block(x)
         
-        x = self.transformer.ln_f(x)
+        x = self.transformer.ln_f(x)  # type: ignore
         logits = self.lm_head(x)
 
         loss = None
