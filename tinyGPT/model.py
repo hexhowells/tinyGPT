@@ -5,7 +5,6 @@ from torch.nn import functional as F
 from transformers.models.gpt2 import GPT2LMHeadModel
 
 import math
-from typing import Callable
 
 from utils import load_config
 
@@ -21,14 +20,7 @@ class CausalSelfAttention(nn.Module):
         # regularization
         self.attn_dropout = nn.Dropout(config['attn_pdrop'])
         self.resid_dropout = nn.Dropout(config['resid_pdrop'])
-        # causal mask to ensure that attention is only applied to the left in the input sequence
-        # persistent=False prevents saving the non-trainable mask tensor to state_dict
-        self.register_buffer(
-            "bias",
-            torch.tril(torch.ones(config['context_size'], config['context_size']))
-                 .view(1, 1, config['context_size'], config['context_size']),
-            persistent=False
-        )
+        
         self.n_head = config['n_head']
         self.n_embd = config['n_embd']
 
@@ -45,11 +37,12 @@ class CausalSelfAttention(nn.Module):
         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, n_head, T, head_dim)
 
         # causal self-attention; Self-attend: (B, n_head, T, head_dim) x (B, n_head, head_dim, T) -> (B, n_head, T, T)
-        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))  # matmul and scale
-        att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))  # mask
-        att = F.softmax(att, dim=-1)
-        att = self.attn_dropout(att)
-        y = att @ v # (B, n_head, T, T) x (B, n_head, T, head_dim) -> (B, n_head, T, head_dim)
+        y = F.scaled_dot_product_attention(
+            q, k, v, 
+            attn_mask=None, 
+            dropout_p=self.attn_dropout.p if self.training else 0.0, 
+            is_causal=True
+        )
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
 
         # output projection
