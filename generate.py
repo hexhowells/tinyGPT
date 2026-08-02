@@ -1,8 +1,8 @@
 import torch
 
-from model import GPT
-from utils import load_config
-from bpe import BPETokenizer
+from tinyGPT.model import GPT
+from tinyGPT.utils import load_config
+from tinyGPT.bpe import BPETokenizer
 
 import time
 

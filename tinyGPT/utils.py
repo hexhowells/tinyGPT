@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 
-def load_config(config_path: str = "config.toml") -> dict:
+def load_config(config_path: str = "tinyGPT/config.toml") -> dict:
     """
     Load config data from TOML file
 
