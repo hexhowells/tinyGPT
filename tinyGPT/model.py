@@ -85,6 +85,22 @@ class Block(nn.Module):
 
 
 class GPT(nn.Module):
+    """
+    General pipeline
+    emb = dropout(token_emb + pos_emb)
+    emb = block(emb) for block in blocks
+    out = linear(layerNorm(emb))
+
+    where block:
+        -> layer norm -> multi-head attention -> + -> layer norm -> MLP -> + -> output
+         ----------------------------------------^  -----------------------^
+
+    where MHA:
+        q, k, v = emb[head] for head in heads
+        q -> linear --> scale -> mask -> softmax --> matmul -> out
+        k -> linear -^                            |
+        v -> linear -------------------------------
+    """
     def __init__(self, config: dict):
         super().__init__()
         assert config['vocab_size'] is not None
@@ -100,10 +116,10 @@ class GPT(nn.Module):
             config['n_embd'] = config['models'][model_type]['n_embd']
 
         self.transformer: nn.ModuleDict = nn.ModuleDict(dict(
-            wte = nn.Embedding(config['vocab_size'], config['n_embd']),
-            wpe = nn.Embedding(config['context_size'], config['n_embd']),
+            wte = nn.Embedding(config['vocab_size'], config['n_embd']),  # weight token embedding
+            wpe = nn.Embedding(config['context_size'], config['n_embd']),  # weight position embedding
             drop = nn.Dropout(config['embd_pdrop']),
-            h = nn.ModuleList([Block(config) for _ in range(config['n_layer'])]),
+            h = nn.ModuleList([Block(config) for _ in range(config['n_layer'])]),  # hidden layers
             ln_f = nn.LayerNorm(config['n_embd']),
         ))
         self.lm_head = nn.Linear(config['n_embd'], config['vocab_size'], bias=False)
