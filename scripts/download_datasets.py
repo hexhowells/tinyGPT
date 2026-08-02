@@ -25,10 +25,9 @@ DATASETS = {
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Download FineWeb (10BT) or SmolTalk dataset shards."
+        description="Download textual datasets for TinyLLM."
     )
     parser.add_argument(
-        "--dataset",
         "-d",
         type=str,
         choices=list(DATASETS.keys()),
@@ -36,7 +35,6 @@ def parse_args():
         help=f"Dataset variant: {list(DATASETS.keys())} (default: fineweb)",
     )
     parser.add_argument(
-        "--local-dir",
         "-o",
         type=Path,
         default=Path("/media/datasets"),
