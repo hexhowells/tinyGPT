@@ -153,13 +153,15 @@ class GPT(nn.Module):
         """
         Initialize a pretrained GPT model by copying over the weights
         from a huggingface/transformers checkpoint.
+
+        model_type: name of the pre-configured model to use
         """
         assert model_type in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}
 
         # create a from-scratch initialized minGPT model
         config = load_config()
         config['model_type'] = model_type
-        config['vocab_size'] = 50257 # openai's model vocabulary
+        config['vocab_size'] = 50257  # openai's model vocabulary
         config['context_size'] = 1024  # openai's model context_size
         model = GPT(config)
         sd = model.state_dict()
