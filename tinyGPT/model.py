@@ -146,6 +146,32 @@ class GPT(nn.Module):
         elif isinstance(module, nn.LayerNorm):
             torch.nn.init.zeros_(module.bias)
             torch.nn.init.ones_(module.weight)
+    
+
+    def forward(self, idx, targets=None) -> tuple[torch.Tensor, torch.Tensor|None]:
+        device = idx.device
+        _, t = idx.size()
+        assert t <= self.context_size, f"Cannot forward sequence of length {t}, block size is only {self.context_size}"
+        
+        # pos is an array of integers as torch.nn.Embedding performs a direct array lookup 
+        # instead of computing the entire linear forward pass
+        pos = torch.arange(0, t, dtype=torch.long, device=device).unsqueeze(0)  # pos = [[0, 1, 2, 3, 4, ..., t]]
+
+        tok_emb = self.transformer.wte(idx)  # type: ignore
+        pos_emb = self.transformer.wpe(pos)  # type: ignore
+        x = self.transformer.drop(tok_emb + pos_emb)  # type: ignore
+        
+        for block in self.transformer.h:  # type: ignore
+            x = block(x)
+        
+        x = self.transformer.ln_f(x)  # type: ignore
+        logits = self.lm_head(x)
+
+        loss = None
+        if targets is not None:
+            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
+
+        return logits, loss
 
 
     @classmethod
@@ -234,29 +260,6 @@ class GPT(nn.Module):
         optimizer = torch.optim.AdamW(optim_groups, lr=train_config['learning_rate'], betas=train_config['betas'])
         
         return optimizer
-
-
-    def forward(self, idx, targets=None) -> tuple[torch.Tensor, torch.Tensor|None]:
-        device = idx.device
-        b, t = idx.size()
-        assert t <= self.context_size, f"Cannot forward sequence of length {t}, block size is only {self.context_size}"
-        pos = torch.arange(0, t, dtype=torch.long, device=device).unsqueeze(0)
-
-        tok_emb = self.transformer.wte(idx)  # type: ignore
-        pos_emb = self.transformer.wpe(pos)  # type: ignore
-        x = self.transformer.drop(tok_emb + pos_emb)  # type: ignore
-        
-        for block in self.transformer.h:  # type: ignore
-            x = block(x)
-        
-        x = self.transformer.ln_f(x)  # type: ignore
-        logits = self.lm_head(x)
-
-        loss = None
-        if targets is not None:
-            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
-
-        return logits, loss
 
 
     @torch.no_grad()
