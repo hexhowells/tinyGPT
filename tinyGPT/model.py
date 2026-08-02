@@ -180,7 +180,11 @@ class GPT(nn.Module):
         Initialize a pretrained GPT model by copying over the weights
         from a huggingface/transformers checkpoint.
 
-        model_type: name of the pre-configured model to use
+        Args:
+            model_type: name of the pre-configured model to use
+        
+        Returns:
+            the model loaded with pre-trained weights
         """
         assert model_type in {'gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl'}
 
