@@ -3,11 +3,10 @@ Trains a character-level language model.
 """
 
 import os
-import sys
+from pathlib import Path
 
 import torch
 from torch.utils.data import Dataset
-from torch.utils.data.dataloader import DataLoader
 
 from tinyGPT.model import GPT
 from tinyGPT.trainer import Trainer
@@ -55,6 +54,9 @@ if __name__ == '__main__':
     # get default config and overrides from the command line, if any
     config = load_config()
     print(config)
+
+    folder = Path(config['system']['work_dir'])
+    folder.mkdir(parents=True, exist_ok=True)
 
     # construct the training dataset
     text = open('tiny-shakespear.txt', 'r').read()
