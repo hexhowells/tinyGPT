@@ -49,7 +49,6 @@ class CharDataset(Dataset):
         y = torch.tensor(dix[1:], dtype=torch.long)
         return x, y
 
-# -----------------------------------------------------------------------------
 
 if __name__ == '__main__':
 
