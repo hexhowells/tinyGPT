@@ -275,26 +275,38 @@ class GPT(nn.Module):
         Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
         the sequence max_new_tokens times, feeding the predictions back into the model each time.
         Most likely you'll want to make sure to be in model.eval() mode of operation for this.
+
+        Args:
+            idx: tensor representing the index of each input token
+            max_new_tokens: max number of tokens to output
+            temperature: tempature of the model (0 = deterministic, 1 = most random)
+            do_sample: whether to sample from the distribution or take the most likely token
+            top_k: the number of output tokens to sample from (1 = most likely token every time)
+        
+        Returns:
+            tensor representing the input token indices and all the output tokens
         """
         for _ in range(max_new_tokens):
             # if the sequence context is growing too long we must crop it at context_size
             idx_cond = idx if idx.size(1) <= self.context_size else idx[:, -self.context_size:]
-            # forward the model to get the logits for the index in the sequence
-            logits, _ = self(idx_cond)
-            # pluck the logits at the final step and scale by desired temperature
-            logits = logits[:, -1, :] / temperature
+            
+            logits, _ = self.forward(idx_cond)
+            logits = logits[:, -1, :] / temperature  # scale logits by desired temperature
+            
             # optionally crop the logits to only the top k options
             if top_k is not None:
                 v, _ = torch.topk(logits, top_k)
                 logits[logits < v[:, [-1]]] = -float('Inf')
-            # apply softmax to convert logits to (normalized) probabilities
+            
+            # convert logits to (normalized) probabilities
             probs = F.softmax(logits, dim=-1)
+            
             # either sample from the distribution or take the most likely element
             if do_sample:
                 idx_next = torch.multinomial(probs, num_samples=1)
             else:
                 _, idx_next = torch.topk(probs, k=1, dim=-1)
-            # append sampled index to the running sequence and continue
-            idx = torch.cat((idx, idx_next), dim=1)
+
+            idx = torch.cat((idx, idx_next), dim=1)  # add token to sequence
 
         return idx
