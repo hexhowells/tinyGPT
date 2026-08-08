@@ -253,6 +253,10 @@ class GPT(nn.Module):
 
         # validate that we considered every parameter
         param_dict = {pn: p for pn, p in self.named_parameters()}
+
+        decay.discard('lm_head.weight')
+        no_decay.discard('lm_head.weight')
+        
         inter_params = decay & no_decay
         union_params = decay | no_decay
         assert len(inter_params) == 0, "parameters %s made it into both decay/no_decay sets!" % (str(inter_params), )
