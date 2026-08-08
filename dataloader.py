@@ -3,6 +3,7 @@ import torch
 from torch.utils.data import IterableDataset
 import pyarrow.parquet as pq
 from transformers import AutoTokenizer
+from typing import Generator
 
 
 class FineWebDataset(IterableDataset):
@@ -24,7 +25,7 @@ class FineWebDataset(IterableDataset):
             raise FileNotFoundError(f"No .parquet shards found in {data_dir}")
 
 
-    def _get_worker_shards(self):
+    def _get_worker_shards(self) -> list:
         """Splits Parquet shards across DDP ranks and DataLoader workers."""
         worker_info = torch.utils.data.get_worker_info()
         
@@ -52,7 +53,7 @@ class FineWebDataset(IterableDataset):
             return rank_files[worker_id::num_workers]  # multi-process, split rank_files across workers
 
 
-    def __iter__(self):
+    def __iter__(self) -> Generator[dict]:
         shards = self._get_worker_shards()
         token_buffer = []
 
