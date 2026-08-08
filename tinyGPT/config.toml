@@ -1,4 +1,4 @@
-model_type = 'gpt-nano'
+model_type = 'gpt2'
 n_layer = 12
 n_head = 12
 n_embd =  768
@@ -31,7 +31,7 @@ block_size = 128
 
 [trainer]
 device = "auto"          # "auto", "cuda", or "cpu"
-batch_size = 64
+batch_size = 30
 num_workers = 0
 learning_rate = 5e-4
 weight_decay = 0.1
@@ -41,3 +41,4 @@ max_iters = 50_000
 
 [system]
 work_dir = "./out"
+data_dir = "/media/datasets/fineweb_10BT"
