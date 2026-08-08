@@ -2,7 +2,6 @@ import glob
 import torch
 from torch.utils.data import IterableDataset
 import pyarrow.parquet as pq
-from transformers import AutoTokenizer
 from typing import Generator
 
 
@@ -10,15 +9,14 @@ class FineWebDataset(IterableDataset):
     def __init__(
             self,
             data_dir: str,
-            tokenizer_name: str = "gpt2",
+            tokenizer,
             seq_len: int = 1024
         ) -> None:
         super().__init__()
         self.data_dir = data_dir
         self.seq_len = seq_len
 
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
-        self.tokenizer.model_max_length = int(1e30)  # override max-length to prevent seq length warnings
+        self.tokenizer = tokenizer
         
         self.files = sorted(glob.glob(f"{data_dir}/**/*.parquet", recursive=True))
         if not self.files:
@@ -53,7 +51,7 @@ class FineWebDataset(IterableDataset):
             return rank_files[worker_id::num_workers]  # multi-process, split rank_files across workers
 
 
-    def __iter__(self) -> Generator[dict]:
+    def __iter__(self):
         shards = self._get_worker_shards()
         token_buffer = []
 
@@ -79,4 +77,4 @@ class FineWebDataset(IterableDataset):
                         x = torch.tensor(chunk[:-1], dtype=torch.long)
                         y = torch.tensor(chunk[1:], dtype=torch.long)
 
-                        yield {"input_ids": x, "labels": y}
+                        yield x, y
