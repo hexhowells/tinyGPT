@@ -124,6 +124,9 @@ class GPT(nn.Module):
         ))
         self.lm_head = nn.Linear(config['n_embd'], config['vocab_size'], bias=False)
 
+        # weight sharing as per https://arxiv.org/abs/1608.05859
+        self.transformer.wte.weight = self.lm_head.weight
+
         # init all weights, and apply a special scaled init to the residual projections, per GPT-2 paper
         self.apply(self._init_weights)
         for pn, p in self.named_parameters():
