@@ -88,8 +88,8 @@ optimiser = model.configure_optimizers(config['trainer'])
 model = torch.compile(model) 
 accumulation_steps = config['trainer']['accumulation_steps']
 
-save_interval = 5000
-sample_interval = 500
+save_interval = 500
+sample_interval = 250
 sample_prompt = "I am an artificial intelligence"
 
 global_step = 0
