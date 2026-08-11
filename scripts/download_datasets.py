@@ -29,6 +29,7 @@ def parse_args():
     )
     parser.add_argument(
         "-d",
+        "--dataset",
         type=str,
         choices=list(DATASETS.keys()),
         default="fineweb",
@@ -36,6 +37,7 @@ def parse_args():
     )
     parser.add_argument(
         "-o",
+        "--output_dir",
         type=Path,
         default=Path("/media/datasets"),
         help="Base directory path (dataset name will be appended) (default: /media/datasets)",
@@ -46,7 +48,7 @@ def parse_args():
 def main():
     args = parse_args()
     config = DATASETS[args.dataset]
-    target_dir = args.local_dir / args.dataset
+    target_dir = args.output_dir / args.dataset
 
     print(f"Downloading {config['repo_id']} -> {target_dir.resolve()}")
     
