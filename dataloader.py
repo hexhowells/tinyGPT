@@ -1,8 +1,7 @@
 import glob
 import torch
-from torch.utils.data import IterableDataset
+from torch.utils.data import IterableDataset, Dataset
 import pyarrow.parquet as pq
-from typing import Generator
 
 
 class FineWebDataset(IterableDataset):
@@ -78,3 +77,77 @@ class FineWebDataset(IterableDataset):
                         y = torch.tensor(chunk[1:], dtype=torch.long)
 
                         yield x, y
+
+
+class SmolTalkDataset(Dataset):
+    def __init__(
+            self, 
+            data_dir: str,
+            tokenizer,
+            seq_len: int = 1024
+        ) -> None:
+        self.tokenizer = tokenizer
+
+        if self.tokenizer.pad_token_id is None:
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+
+        self.seq_len = seq_len
+                
+        files = sorted(glob.glob(f"{data_dir}/**/*.parquet", recursive=True))
+        if not files:
+            raise FileNotFoundError(f"No .parquet shards found in {data_dir}")
+
+        self.conversations: list[dict] = []
+
+        for file in files:
+            table = pq.read_table(file, columns=['messages'])
+            messages = table['messages'].to_pylist()
+            self.conversations.extend(messages)
+
+
+    def __len__(self):
+        return len(self.conversations)
+
+
+    def _apply_chat_template(self, messages):
+        text = ""
+        for message in messages:
+            if message["role"] == "system": continue
+            text += f'<|{message["role"]}|>\n{message["content"]}\n'
+
+        text += '<|assistant|>\n'
+
+        return text
+
+
+    def __getitem__(self, idx):
+        messages = self.conversations[idx]
+
+        prompt = self._apply_chat_template(messages[:-1])
+
+        answer = messages[-1]['content'] + self.tokenizer.eos_token
+
+        prompt_tokens = self.tokenizer.encode(prompt)
+        answer_tokens = self.tokenizer.encode(answer)
+
+        full_tokens = prompt_tokens + answer_tokens
+
+        if len(full_tokens) > self.seq_len+1:
+            full_tokens = full_tokens[:self.seq_len+1]
+
+        x = torch.tensor(full_tokens[:-1], dtype=torch.long)
+        y = torch.tensor(full_tokens[1:], dtype=torch.long)
+
+        prompt_length = min(len(prompt_tokens)-1, len(y))
+        if prompt_length > 0:
+            y[:prompt_length] = -1
+
+        return x, y
+
+
+def sft_collate_fn(batch, pad_token_id):
+    xs, ys = zip(*batch)
+    x_padded = torch.nn.utils.rnn.pad_sequence(xs, batch_first=True, padding_value=pad_token_id)
+    y_padded = torch.nn.utils.rnn.pad_sequence(ys, batch_first=True, padding_value=-1)
+
+    return x_padded, y_padded
