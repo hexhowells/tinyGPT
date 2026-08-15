@@ -32,7 +32,7 @@ block_size = 128
 [trainer]
 device = "auto"          # "auto", "cuda", or "cpu"
 batch_size = 16
-accumulation_steps = 32
+accumulation_steps = 32  # 512 / batch_size
 num_workers = 0
 learning_rate = 5e-4
 weight_decay = 0.1
