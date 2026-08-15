@@ -5,7 +5,7 @@ Personal implementation of Karpathy's [minGPT](https://github.com/karpathy/minGP
 Aim of the project is to replicate a GPT-2 (124M) training run on a single 3090, but with some changes to the architecture and data.
 
 ## GPT 2 Training
-For pre-training, we use a 10B token sample of the [FineWeb](https://huggingface.co/datasets/HuggingFaceFW/fineweb) dataset, using the GPT2 tokeniser.
+For pre-training, we use a 10B token sample of the [FineWeb](https://huggingface.co/datasets/HuggingFaceFW/fineweb) dataset, using a pre-trained GPT2 tokeniser from huggingface. Since the model was trained on a single 3090, an effective batch size of 512 was achieved using gradient accumulation with a batch size of 16 and 32 accumulation steps. The model was trained with learning rate scheduling using cosine decay, with 2000 warmup steps.
 
 ## SFT Training
 After pre-training, we perform supervised fine tuning on the base model using the [smol-smoltalk](https://huggingface.co/datasets/HuggingFaceTB/smol-smoltalk) dataset. Since the base GPT model only has a context size of 1024 tokens, the SFT dataset is reduced slightly be removing the system prompt where present. In cases where conversations are longer than the supported context window, the tokens are truncated to match the 1024 token limit (plus an appended EOS token).
