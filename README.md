@@ -7,9 +7,12 @@ Aim of the project is to replicate a GPT-2 (124M) training run on a single 3090,
 ## GPT 2 Training
 For pre-training, we use a 10B token sample of the [FineWeb](https://huggingface.co/datasets/HuggingFaceFW/fineweb) dataset, using a pre-trained GPT2 tokeniser from huggingface. Since the model was trained on a single 3090, an effective batch size of 512 was achieved using gradient accumulation with a batch size of 16 and 32 accumulation steps. The model was trained with learning rate scheduling using cosine decay, with 2000 warmup steps.
 
+![GPT 2 training graph](/images/gpt2-training-graph.png)
+
 ## SFT Training
 After pre-training, we perform supervised fine tuning on the base model using the [smol-smoltalk](https://huggingface.co/datasets/HuggingFaceTB/smol-smoltalk) dataset. Since the base GPT model only has a context size of 1024 tokens, the SFT dataset is reduced slightly be removing the system prompt where present. In cases where conversations are longer than the supported context window, the tokens are truncated to match the 1024 token limit (plus an appended EOS token).
 
+![GPT 2 SFT training graph](/images/gpt2-sft-training-graph.png)
 
 ## GPT 2 vs GPT 2 + SFT
 The below shows some examples of responses to chat template prompts. We compare a base GPT 2 (124M) model with the finetuned model. You can see from the results that SFT does a lot better at producing conversational text in the chat format required! The actual outputs are still not great (not factual, not good code, some weird tangents) but this is expected for a model of only 124M parameters. But these initial results shows promise and is the model & data are scaled up then it should start to be much better!
