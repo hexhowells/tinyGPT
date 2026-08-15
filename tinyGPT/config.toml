@@ -40,6 +40,11 @@ betas = [0.9, 0.95]
 grad_norm_clip = 1.0
 max_iters = 50_000
 
+[sft]
+learning_rate = 2e-5
+warmup_steps = 200
+epochs = 2
+
 [system]
 work_dir = "./out"
 data_dir = "/media/datasets/fineweb_10BT"
