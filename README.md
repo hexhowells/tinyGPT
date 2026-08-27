@@ -15,7 +15,7 @@ After pre-training, we perform supervised fine tuning on the base model using th
 ![GPT 2 SFT training graph](/images/gpt2-sft-training-graph.png)
 
 ## GPT 2 vs GPT 2 + SFT
-The below shows some examples of responses to chat template prompts. Results were generated using the `generate.py` script, with a maximum token output of 200 tokens. We compare a base GPT 2 (124M) model with the finetuned model. You can see from the results that SFT does a lot better at producing conversational text in the chat format required! The actual outputs are still not great (not factual, not good code, some weird tangents) but this is expected for a model of only 124M parameters. But these initial results shows promise and is the model & data are scaled up then it should start to be much better!
+The below shows some examples of responses to chat template prompts. Results were generated using the `generate.py` script, with a maximum token output of 200 tokens. We compare a base GPT 2 (124M) model with the finetuned model. You can see from the results that SFT does a lot better at producing conversational text in the chat format required! The actual outputs are still not great (not factual, not good code, some weird tangents) but this is expected for a model of only 124M parameters. But these initial results shows promise and by scaling up the model & data we would expect these results to improve!
 
 ---
 
